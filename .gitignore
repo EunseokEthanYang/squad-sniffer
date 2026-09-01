@@ -1,0 +1,5 @@
+.DS_Store
+backend/dump/
+assets/src/
+*.MOV
+*.mov

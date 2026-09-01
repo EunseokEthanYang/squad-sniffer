@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Taximeter Squad — 교실</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/galmuri@2.40.3/dist/galmuri.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="stylesheet" href="css/game.css" id="themeLink">
+<script>
+  /* 테마 스위치 (디자인 초안 비교용): ?theme=draft 또는 localStorage.sniffer_theme='draft' → css/theme-draft.css
+     기본은 css/game.css. 제거하려면 이 블록만 지우면 됨. */
+  (function(){var q=new URLSearchParams(location.search).get('theme');if(q)localStorage.setItem('sniffer_theme',q);
+    var t=localStorage.getItem('sniffer_theme')||'light',map={draft:'css/theme-draft.css',light:'css/theme-light.css'};   // 기본: 밝은 테마
+    if(map[t])document.getElementById('themeLink').href=map[t];})();
+</script>
+</head>
+<body>
+<div id="stage"><div id="game">
+  <!-- #scene = 캔버스 + 월드 오버레이(좌표가 캔버스를 따라감). HUD 는 #game(뷰포트)에 남는다. config.fit='cover' 면 #scene 이 화면을 꽉 채운다 -->
+  <div id="backdrop"></div>
+  <div id="scene">
+    <canvas id="world" width="960" height="717"></canvas>
+    <div id="overlay"></div>
+    <div id="talkHint"><span class="kbd">Space</span>대화</div>
+  </div>
+  <!-- 음성 안내판: 접속하면 바로 "문제를 말해 주세요" (config.voice.auto). 클릭 = 듣기 켜고 끄기 -->
+  <div id="voicePanel" hidden><div class="vp-mic"><i></i></div><div class="vp-body"><div id="voiceMain"></div><div id="voiceText"></div><small id="voiceHint"></small></div></div>
+
+  <div id="hud"><div id="meterBox">
+    <div><div class="mlabel">TAXIMETER</div><div id="meterVal">0<small>wtok</small></div></div>
+    <div class="lamps" id="lamps"></div>
+    <div id="probStat"></div>
+  </div></div>
+  <div id="srcChip">● 연결 확인 중…</div>
+
+  <div id="verdict"><div class="vt"></div><div class="vf"></div></div>
+
+  <!-- 좌상단: 주 행동 1개 + 설정 메뉴(나머지는 접어둠) -->
+  <div id="ctrl">
+    <button class="ctrlBtn accent" id="taskBtn">＋ 문제 내기 <span id="queueBadge"></span></button>
+    <button class="ctrlBtn" id="micBtn" hidden title="마이크로 문제 내기 (V)">🎙 말로 내기</button>
+    <button class="ctrlBtn" id="gearBtn" title="설정">⚙</button>
+    <div id="gearMenu">
+      <button class="ctrlBtn" id="modeBtn">대화 UI: <b>미연시</b></button>
+      <button class="ctrlBtn" id="nerdBtn">NERD MODE</button>
+      <button class="ctrlBtn" id="ttBtn">시간표 <b>ON</b></button>
+      <button class="ctrlBtn" id="bellBtn">🔔 종소리 <b>ON</b></button>
+      <button class="ctrlBtn" id="tagBtn">이름표: <b>자동</b></button>
+      <button class="ctrlBtn" id="themeBtn">테마: <b>밝음</b></button>
+      <label class="ctrlBtn" id="squadRow">스쿼드 <select id="squadSel"><option value="">(자동: 첫 스쿼드)</option></select></label>
+    </div>
+  </div>
+  <!-- 교실 벽 시간표: 몇 교시·무슨 단계인지만. 자세한 건 행을 클릭했을 때 -->
+  <div id="timetable"><div id="ttTitle"></div><div class="tt-nav" id="ttUp"></div><div id="ttRows"></div><div class="tt-nav" id="ttDown"></div></div>
+  <div id="ttDetail"><button id="ttDetailClose">✕</button><div id="ttDetailBody"></div></div>
+
+  <div id="subs"></div>
+
+  <!-- 미연시 대화창: 입간판(立ち絵) + 이름패 + 하단 전체폭 대사창 + 메뉴 줄 -->
+  <div id="vnBox">
+    <img id="vnPortraitImg" alt="" draggable="false">
+    <canvas id="vnPortrait" width="64" height="70"></canvas>
+    <div id="vnName"></div>
+    <div id="vnMain">
+      <div id="vnEcho"></div>
+      <div id="vnText"></div>
+      <div id="vnInputRow"><input id="vnInput" placeholder="질문을 입력하세요… (Enter)"><button id="vnSend">전송</button></div>
+      <div id="vnMenu">
+        <button id="vnAuto" type="button">AUTO</button>
+        <button id="vnLog" type="button">LOG</button>
+        <button id="vnClose" type="button">CLOSE</button>
+      </div>
+      <div id="vnFoot">이 질문은 이 에이전트의 모델에게 그대로 전달됩니다 (MOCK 에서는 내장 응답)</div>
+    </div>
+  </div>
+
+  <div id="chatPanel">
+    <div id="cpHead"><canvas id="cpAvatar" width="64" height="70"></canvas><div><div id="cpName"></div><div id="cpMeta"></div></div><button id="cpClose">✕</button></div>
+    <div id="cpStatus"></div>
+    <div id="cpMsgs"></div>
+    <div id="cpInputRow"><input id="cpInput" placeholder="메시지 입력…"><button id="cpSend">전송</button></div>
+    <div id="cpFoot">이 질문은 이 에이전트의 모델에게 그대로 전달됩니다 (MOCK 에서는 내장 응답)</div>
+  </div>
+
+  <div id="taskModal"><div id="taskCard">
+    <h2>스쿼드에 문제 내기</h2>
+    <p>입력한 문제가 칠판에 적히고 에이전트들이 처리합니다.<br>(MOCK: 카테고리별 흐름 재생 · LIVE: 스쿼드가 실제로 실행)</p>
+    <textarea id="taskText" placeholder="예: 1847 × 2093 을 계산해줘 / 이 함수의 버그를 고쳐줘 …"></textarea>
+    <div id="taskRow">
+      <select id="taskCat"><option value="auto">분류: 자동(triage)</option><option value="generic">generic</option><option value="math">math</option><option value="coding">coding</option></select>
+      <button id="taskCancel">취소</button><button id="taskGo">출제 ▶</button>
+    </div>
+  </div></div>
+
+  <div id="intro"><h1></h1><p></p><div class="go"></div><div class="src">데이터 소스 확인 중…</div></div>
+</div>
+<!-- Nerd 패널은 게임 화면 "옆" 칸 — 열면 게임이 살짝 줄어들 뿐 가리지 않는다 -->
+<div id="nerd">
+  <h3>▚ BUDGET BURNDOWN</h3>
+  <div id="burnWrap"><canvas id="burn"></canvas>
+    <div id="burnLegend"><i style="background:#ffb020"></i>우리 스쿼드 누적<br><i style="background:#ff5d5d"></i>가상의 조립라인 스쿼드였다면</div></div>
+  <h3>▚ RAW TRACE</h3>
+  <div id="traceWrap"><div id="trace"></div></div>
+</div>
+</div>
+
+<!-- 데이터 레이어 -->
+<script src="backend/aigo_client.js"></script>
+<script src="backend/aigo_state.js"></script>
+<!-- 생성 자산 (tools/inject_sprites.ps1) -->
+<script src="assets/sprites_data.js"></script>
+<!-- 설정 · 엔진 · 데이터 바인딩 · 부트 -->
+<script src="js/config.js"></script>
+<script src="js/engine/world.js"></script>
+<script src="js/engine/input.js"></script>
+<script src="js/engine/audio.js"></script>
+<script src="js/engine/ui.js"></script>
+<script src="js/engine/director.js"></script>
+<script src="js/engine/voice.js"></script>
+<script src="js/data/mock.js"></script>
+<script src="js/data/live.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

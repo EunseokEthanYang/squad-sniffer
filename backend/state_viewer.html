@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>AIGO 상위 변수 뷰어</title>
+<style>
+  body{margin:0;background:#0b0d16;color:#dfe3f0;font:12px/1.5 Consolas,monospace;display:grid;grid-template-columns:300px 1fr;height:100vh}
+  aside{border-right:1px solid #232840;padding:12px;overflow:auto}
+  main{padding:12px;overflow:auto}
+  h1{font-size:13px;color:#ffb020;margin:0 0 8px}
+  .k{color:#6ea8ff}.n{color:#ffd56e}.s{color:#9adba8}.b{color:#ff8fb0}.null{color:#667}
+  .card{background:#12162a;border:1px solid #232840;border-radius:8px;padding:8px 10px;margin-bottom:8px}
+  .card b{color:#fff}
+  button{background:#1c2036;border:1px solid #3a4066;color:#dfe3f0;border-radius:6px;padding:5px 9px;cursor:pointer;font:inherit;margin:2px 2px 8px 0}
+  pre{margin:0;white-space:pre-wrap;word-break:break-all}
+</style>
+</head>
+<body>
+<aside>
+  <h1>AIGO.state 요약</h1>
+  <div id="sum"></div>
+  <button onclick="AIGO.refreshAll()">refreshAll</button>
+  <button onclick="AIGO.refreshFast()">refreshFast</button>
+  <div class="card" id="evt"></div>
+</aside>
+<main>
+  <h1>전체 상위 변수 (JSON) — 시각화는 이 키들만 믿으면 됨</h1>
+  <pre id="json"></pre>
+</main>
+<script src="aigo_client.js"></script>
+<script src="aigo_state.js"></script>
+<script>
+function hl(j){
+  return j.replace(/("[^"]+"):/g,'<span class=k>$1</span>:')
+          .replace(/: (-?\d+\.?\d*)/g,': <span class=n>$1</span>')
+          .replace(/: ("[^"]*")/g,': <span class=s>$1</span>')
+          .replace(/: (true|false)/g,': <span class=b>$1</span>')
+          .replace(/: null/g,': <span class=null>null</span>');
+}
+function f1(v){ return (typeof v==='number') ? v.toFixed(1) : '-'; }
+function render(s){
+  const u=s.usage,b=s.budget;
+  document.getElementById('sum').innerHTML=
+    '<div class=card><b>server</b> '+(s.server.status||'-')+' · router '+s.server.routerHealthy+' · v'+(s.server.version||'-')+'<br>models: '+s.server.models.length+'</div>'+
+    '<div class=card><b>squad</b> '+(s.squad.name||'(없음)')+'<br>status '+(s.squad.status||'-')+' · agents '+s.squad.agentCount+' · available '+s.squad.available+'</div>'+
+    '<div class=card><b>agents</b><br>'+(s.agents.map(a=>a.label+'('+a.name+') ×'+a.rate+' — '+a.tokens+' tok / '+a.weightedTokens+' wtok').join('<br>')||'-')+'</div>'+
+    '<div class=card><b>usage</b> total '+u.totalTokens+' · <span style="color:#ffb020">weighted '+u.weightedTokens+'</span><br>budget '+(b.maxTotalTokens==null?'-':b.maxTotalTokens)+' ('+u.percentOfBudget.toFixed(1)+'%) · warn '+(b.warningPercent==null?'-':b.warningPercent)+'%<br>active '+u.activeAgents+' · exceeded '+u.exceeded+'</div>'+
+    '<div class=card><b>metrics</b> cpu '+f1(s.metrics.cpuPct)+'% · mem '+f1(s.metrics.memPct)+'% · '+f1(s.metrics.tokensPerSecond)+' tok/s</div>'+
+    '<div class=card><b>tasks</b> '+s.tasks.count+' · waves '+s.tasks.waves.length+' · <b>exec</b> '+s.executions.count+' · activity '+s.activity.length+'</div>'+
+    '<div class=card><b>meta</b> sse <b>'+s.meta.sse+'</b> · refresh '+s.meta.refreshMs+'ms · errors '+s.meta.errors.length+'<br>'+(s.meta.lastRefresh||'')+'</div>';
+  document.getElementById('evt').innerHTML='<b>SSE events ('+s.events.length+')</b> 이름별: '+JSON.stringify(s.meta.eventNamesSeen)+'<br>'+
+    s.events.slice(-8).map(e=>e.kind+' · '+e.name+' · '+(e.agentId||'')).join('<br>');
+  document.getElementById('json').innerHTML=hl(JSON.stringify(AIGO.toJSON(),null,1));
+}
+AIGO.configure({});
+AIGO.on(render);
+AIGO.start({pollMs:10000,fastMs:2000});
+</script>
+</body>
+</html>
