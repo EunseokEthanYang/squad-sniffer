@@ -202,3 +202,10 @@ squad-sniffer/
   · `ui.sendChat` 은 이제 문자열/Promise 둘 다 받는다 — Promise 면 "…" 를 먼저 놓고 도착하면 그 자리를 갈아 끼운다. `aigo_state.js` 는 `systemPrompt` 를 상위 변수에 담는다.
   · 실측 답: "Method 2 Count를 진행 중이에요. 지금까지 2,042개의 토큰을 사용했어요."
 - **요금 한도(429) 재시도**(`squad_engine._chat`): 한 단계에서 3명이 동시에 모델을 부르면 Groq 분당 한도에 같이 걸린다. 제공자가 알려 주는 대기 시간("try again in 5 seconds")을 파싱해 기다렸다가 재시도(`AIGO_SQUAD_RATE_LIMIT_RETRIES` 3회, 최대 대기 `..._MAX_WAIT` 30초). 이 수정 전 코드리뷰 스쿼드 실행에서 보안 검토 1건이 429로 ✗ 났고, 수정 후 같은 문제로 재실행하니 4작업 전원 성공(43초·15.3k tok).
+
+## 17. 2026-09-01 커밋 · 로컬 도커 실행
+- **저장소 두 개**: `decomposition/aigo-web`(브랜치 `taximeter-squad-studio`, 배포되는 전부 — 엔진·프록시·Studio·viz 사본·원본 콘솔 자산·시드·테스트 40개) / `squad-sniffer`(새 저장소, 시각화 원본). `viz/` 는 `sync-viz.sh` 로 만든 사본이므로 시각화 수정은 항상 `squad-sniffer` 에서 하고 다시 sync 한다.
+- **로컬 실행**: `cd decomposition/aigo-web && GROQ_API_KEY=... ./run-local.sh` → 빌드(35초, arm64) → 실행 → `http://127.0.0.1:8080/studio`. `stop`/`logs`/`rm` 인자 지원. 데이터는 `./.local-data`(gitignore).
+- **첫 부팅 시드**: `backend/seed/squads/*.json`(멀티태스크 데모·Code Review, 배포본에서 그대로 내려받아 프로바이더 id 만 제거) → `supervisor.seed_squads()` 가 이름이 없을 때만 생성. 생성 API 는 `workspacePath` 를 필수로 요구한다(없으면 422) → 시더가 `$AIGO_HOME/workspace/<파일명>` 으로 채운다. 서버가 새 UUID 를 부여하므로 배포본의 `?squad=` 링크와는 id 가 다르다.
+- **검증**: 빈 볼륨으로 띄워 두 스쿼드 자동 생성 + `/studio`·`/studio/split`·`/studio/classroom`·`/_viz` 모두 200, 상단 바가 "아직 수업 전"으로 정상. 모델 키가 없으면 화면은 다 뜨고 실행만 실패한다(의도).
+- 맥에서 Docker Desktop 이 없으면 OrbStack 도 된다: `export DOCKER_HOST=unix://$HOME/.orbstack/run/docker.sock`.
