@@ -77,6 +77,31 @@ const check = (name, cond, extra) => { console.log((cond ? '  ok   ' : '  FAIL '
   /* 연습(mock) 모드면 8분이 아니라 곧 사실대로 */
   Sniffer.app.sourceKind = 'mock'; V.state = 'idle'; V._submit('연습 문제입니다');
   check('연습 모드에서도 접수 표시', V.state === 'busy');
+
+  /* ---- 말 줄 세우기: 뒷사람이 앞사람 말을 끊지 않는다, 긴 글은 문장 단위로 차례로 ---- */
+  V.silence(); spoken = [];
+  const ent = { charSet: 'cho_mi' };
+  let ended = 0;
+  V.speakFor(ent, '첫 번째 학생의 답입니다. 두 문장이에요.', { onend: () => ended++ });
+  V.speakFor(ent, '두 번째 학생의 답입니다.', { onend: () => ended++ });
+  await sleep(60);
+  check('두 학생 말이 모두 끝까지 나온다', spoken.length >= 2 && spoken.some(t => t.includes('첫 번째')) && spoken.some(t => t.includes('두 번째')), JSON.stringify(spoken));
+  check('앞 말이 먼저, 뒷 말이 나중', spoken.findIndex(t => t.includes('첫 번째')) < spoken.findIndex(t => t.includes('두 번째')));
+  check('각 말이 끝나면 onend 가 한 번씩', ended === 2, 'ended=' + ended);
+  spoken = []; ended = 0;
+  const long = Array.from({ length: 6 }, (_, i) => `이것은 ${i + 1}번째 문장이고 꽤 길게 이어져서 한 덩어리로는 다 못 읽을 정도로 길어요.`).join(' ');
+  V.speakFor(ent, long, { onend: () => ended++ });
+  await sleep(120);
+  check('긴 답은 여러 덩어리로 나뉘어 전부 읽힌다', spoken.length >= 2 && spoken.join(' ').includes('6번째'), 'chunks=' + spoken.length);
+  check('덩어리가 다 끝난 뒤에만 onend', ended === 1, 'ended=' + ended);
+
+  /* ---- 풀이 중 마이크 붙잡기 ---- */
+  V.silence(); V.auto = true; V.hold();
+  check('풀이 시작: 마이크가 꺼진다', V.state === 'busy' && V.held && live.length === 0, 'state=' + V.state + ' recs=' + live.length);
+  V.listen(); await sleep(5);
+  check('붙잡힌 동안은 다시 듣지 않는다', live.length === 0, 'recs=' + live.length);
+  V.release(); await sleep(520);
+  check('실행이 끝나면 다시 듣는다', !V.held && V.state === 'listen' && live.length === 1, 'state=' + V.state + ' recs=' + live.length);
   console.log(fail.length ? '\n실패 ' + fail.length + '건: ' + fail.join(', ') : '\n모두 통과');
   process.exit(fail.length ? 1 : 0);
 })();

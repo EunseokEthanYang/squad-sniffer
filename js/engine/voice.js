@@ -14,6 +14,7 @@ window.Sniffer = window.Sniffer || {};
 
 Sniffer.Voice = {
   enabled: false, supported: false, state: 'off', auto: false,
+  held: false,                                      // 풀이 중: 마이크를 완전히 끄고, 실행이 끝날 때까지 다시 켜지 않는다
   _rec: null, _voice: null, _busyTimer: null, _restartTimer: null, _permTimer: null, _sgen: 0, _netFails: 0, _wasAuto: false,
 
   init(cfg, onSubmit) {
@@ -48,13 +49,14 @@ Sniffer.Voice = {
 
   /* ---- 마이크·소리 즉시 정지 (화면 문구는 건드리지 않음) ---- */
   _abort() { clearTimeout(this._restartTimer); clearTimeout(this._permTimer); const r = this._rec; this._rec = null; if (r) { r.onstart = r.onresult = r.onerror = r.onend = null; try { r.abort(); } catch (e) {} } },
-  _hush() { this._sgen++; if ('speechSynthesis' in window) speechSynthesis.cancel(); const au = this._audio; this._audio = null; if (au) { try { au.onended = au.onerror = null; au.pause(); au.src = ''; } catch (e) {} } },   // 진행 중 발화(브라우저 음성·서버 오디오) 취소 + 그 콜백 무효화
+  _hush() { this._sgen++; this._queue = []; this._speaking = false; if ('speechSynthesis' in window) speechSynthesis.cancel(); const au = this._audio; this._audio = null; if (au) { try { au.onended = au.onerror = null; au.pause(); au.src = ''; } catch (e) {} } },   // 진행 중 발화(브라우저 음성·서버 오디오) 취소 + 그 콜백 무효화
   silence() { this._abort(); this._hush(); },
 
   /* ---- 듣기 ---- */
   listen() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR || !this.enabled || this.state === 'denied' || this.state === 'unsupported') return;
+    if (this.held) return;                                     // 풀이 중에는 절대 다시 듣지 않는다 (학생들 말소리를 되먹지 않게)
     this.silence();                                            // 옛 인식·발화를 확실히 끊고 시작 (중복 시작 금지)
     const V = this.cfg, rec = this._rec = new SR(); rec.lang = V.lang || 'ko-KR'; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
     let finalText = '', gotAny = false;
@@ -106,6 +108,18 @@ Sniffer.Voice = {
     }, live ? (this.cfg.busyTimeoutMs || 480000) : 10000);
   },
   _after() { if (this.auto) this.listen(); else this._set('idle', '🎙 말로 문제 내기', '', '여기를 누르거나 V 키'); },
+  /* 문제 풀이가 시작되면 마이크를 완전히 끈다(어느 경로로 냈든). 실행이 끝나야 release() 로 다시 켠다 */
+  hold() {
+    if (!this.enabled) return;
+    this.held = true; this._abort();
+    if (this.state !== 'off' && this.state !== 'denied' && this.state !== 'unsupported')
+      this._set('busy', '풀이 중 — 마이크를 껐어요', '', '다 끝나면 다시 들을게요');
+  },
+  release(resume) {
+    if (!this.held) return;
+    this.held = false;
+    if (resume !== false && this.enabled && this.state === 'busy') this._after();
+  },
 
   /* ---- 읽어 주기 ---- */
   clean(text) {
@@ -124,31 +138,61 @@ Sniffer.Voice = {
     return '콘솔에서 이유를 확인해 주세요.';
   },
   /* 음성 루프(마이크)와 무관하게 아무 때나 읽기. 서버 TTS(/_tts, Supertonic) 가 있으면 그 목소리로,
-     없거나 실패하면 브라우저 음성으로. opts: { voice: 'F2', speed, onend } */
+     없거나 실패하면 브라우저 음성으로.
+     말은 줄을 선다: 앞사람 말을 끊지 않고 차례로 끝까지 읽는다(끊으려면 silence()). 긴 글은 문장 단위로
+     나눠 먼저 나온 문장부터 재생하고, 다음 문장은 재생 중에 미리 받아 둔다.
+     opts: { voice: 'F2', speed, onend, chunk: true } */
   say(text, opts) {
     opts = opts || {}; text = (text || '').trim();
     if (!text) { if (opts.onend) opts.onend(); return; }
-    this._hush();
-    const g = this._sgen, cfg = this.cfg || {}, T = cfg.tts || {};
-    const fin = () => { if (this._sgen !== g) return; if (opts.onend) opts.onend(); };
-    if (T.path && this._ttsDown !== true && window.fetch) {
-      const body = { text: text.slice(0, (cfg.agents && cfg.agents.maxChars) || 400), voice: opts.voice || T.voice, speed: opts.speed || (cfg.agents && cfg.agents.speed) || cfg.rate };
-      fetch(T.path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-        .then(r => { if (!r.ok) throw new Error('tts ' + r.status); return r.blob(); })
-        .then(blob => {
-          if (this._sgen !== g) return;
-          const au = new Audio(URL.createObjectURL(blob)); this._audio = au;
-          au.onended = () => { if (this._audio === au) this._audio = null; URL.revokeObjectURL(au.src); fin(); };
-          au.onerror = () => { if (this._audio === au) this._audio = null; this._sayBrowser(text, g, fin); };
-          au.play().catch(() => { if (this._audio === au) this._audio = null; this._sayBrowser(text, g, fin); });   // 자동재생 차단 → 브라우저 음성
-        })
-        .catch(err => {                                        // 서비스가 없다: 한동안 묻지 않고 브라우저 음성으로
-          this._ttsDown = true; setTimeout(() => { this._ttsDown = false; }, 60000);
-          if (this._sgen === g) this._sayBrowser(text, g, fin);
-        });
-      return;
+    if (this.enabled) this._abort();                            // 스피커 소리를 마이크가 되먹지 않게
+    const parts = opts.chunk === false ? [text] : this._chunks(text);
+    const gen = this._sgen;
+    parts.forEach((t, i) => this._queue.push({ text: t, opts, gen, onend: i === parts.length - 1 ? opts.onend : null }));
+    if (!this._speaking) this._pump();
+  },
+  _queue: [], _speaking: false,
+  /* 문장 경계로 자르되 한 덩어리는 ~160자 안팎 — 한 덩어리가 2~4초면 합성되니 첫 소리가 빨리 난다 */
+  _chunks(text) {
+    const sents = text.split(/(?<=[.!?。…])\s+|\n+/).map(x => x.trim()).filter(Boolean);
+    const out = []; let cur = '';
+    for (const x of sents) {
+      if (cur && (cur.length + x.length + 1) > 160) { out.push(cur); cur = x; }
+      else cur = cur ? cur + ' ' + x : x;
     }
-    this._sayBrowser(text, g, fin);
+    if (cur) out.push(cur);
+    return out.length ? out : [text];
+  },
+  _pump() {
+    const it = this._queue.shift();
+    if (!it) { this._speaking = false; return; }
+    if (it.gen !== this._sgen) { this._pump(); return; }        // silence() 뒤에 남은 것은 버린다
+    this._speaking = true;
+    if (this._queue[0]) this._prefetch(this._queue[0]);         // 다음 덩어리는 지금 받아 둔다
+    this._playOne(it, () => { if (it.onend) it.onend(); this._pump(); });
+  },
+  _fetchAudio(it) {
+    const cfg = this.cfg || {}, T = cfg.tts || {};
+    if (!T.path || this._ttsDown === true || !window.fetch) return Promise.reject(new Error('no server tts'));
+    const body = { text: it.text, voice: it.opts.voice || T.voice, speed: it.opts.speed || (cfg.agents && cfg.agents.speed) || cfg.rate };
+    return fetch(T.path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(r => { if (!r.ok) throw new Error('tts ' + r.status); return r.blob(); });
+  },
+  _prefetch(it) { if (!it.audio) it.audio = this._fetchAudio(it).catch(e => { it.failed = e; return null; }); },
+  _playOne(it, done) {
+    const g = it.gen, fin = () => { if (this._sgen !== g) return; done(); };
+    this._prefetch(it);
+    it.audio.then(blob => {
+      if (this._sgen !== g) return;
+      if (!blob) {                                              // 서비스가 없다: 한동안 묻지 않고 브라우저 음성으로
+        if (it.failed && !/tts 4\d\d/.test(String(it.failed))) { this._ttsDown = true; setTimeout(() => { this._ttsDown = false; }, 60000); }
+        return this._sayBrowser(it.text, g, fin);
+      }
+      const au = new Audio(URL.createObjectURL(blob)); this._audio = au;
+      au.onended = () => { if (this._audio === au) this._audio = null; URL.revokeObjectURL(au.src); fin(); };
+      au.onerror = () => { if (this._audio === au) this._audio = null; this._sayBrowser(it.text, g, fin); };
+      au.play().catch(() => { if (this._audio === au) this._audio = null; this._sayBrowser(it.text, g, fin); });   // 자동재생 차단 → 브라우저 음성
+    });
   },
   _sayBrowser(text, g, fin) {
     if (!('speechSynthesis' in window) || this._sgen !== g) { fin(); return; }
@@ -158,18 +202,20 @@ Sniffer.Voice = {
     u.onend = end; u.onerror = end; setTimeout(end, Math.min(120000, 400 + text.length * 180));
     speechSynthesis.speak(u);
   },
-  /* 에이전트가 답을 끝냈을 때: 그 캐릭터 세트의 프리셋 목소리로 */
-  speakFor(ent, text) {
+  /* 에이전트가 답을 끝냈을 때: 그 캐릭터 세트의 프리셋 목소리로, 끝까지 */
+  speakFor(ent, text, opts) {
     const A = (this.cfg && this.cfg.agents) || {};
-    if (A.enabled === false || !ent) return;
+    if (A.enabled === false || !ent) { if (opts && opts.onend) opts.onend(); return; }
     const voice = (A.presets || {})[ent.charSet] || A.voice;
-    this.say(this.clean(text), { voice, speed: A.speed });
+    let body = this.clean(text); const max = A.maxChars || 1500;
+    if (body.length > max) body = body.slice(0, max).replace(/\s+\S*$/, '') + ' … 이하 생략.';
+    this.say(body, { voice, speed: A.speed, onend: opts && opts.onend });
   },
   speak(text, opts) {
     opts = opts || {};
     if (!this.enabled || !text) { if (opts.onend) opts.onend(); return; }
     this._abort();                                             // 스피커 소리를 마이크가 되먹지 않게
-    if ((this.cfg.tts || {}).path) return this.say(text, opts);   // 서버 목소리가 있으면 답 읽기도 그것으로
+    if ((this.cfg.tts || {}).path) return this.say(text, Object.assign({ chunk: true }, opts));   // 서버 목소리가 있으면 답 읽기도 그것으로 — 앞 말을 끊지 않고 줄을 선다
     if (!('speechSynthesis' in window)) { if (opts.onend) opts.onend(); return; }
     this._hush();                                              // 앞 발화 취소 + 그 콜백 무효화
     const g = this._sgen, u = new SpeechSynthesisUtterance(text);

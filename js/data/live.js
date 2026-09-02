@@ -61,7 +61,16 @@ Sniffer.Live = class Live {
       ui.chatMode = 'vn'; ui.openChat(ent);
       const inp = document.getElementById('vnInput'); if (inp && document.activeElement === inp) inp.blur();   // 자동으로 열린 창이 키 입력을 뺏지 않게
     }
-    if (Sniffer.Voice && Sniffer.Voice.speakFor) Sniffer.Voice.speakFor(ent, body);
+    const openedAt = Date.now(), minMs = Math.max(4000, Math.min(20000, body.length * 60));   // 소리가 안 나와도 읽을 시간은 준다
+    const dismiss = () => {
+      const wait = Math.max(1200, minMs - (Date.now() - openedAt));
+      setTimeout(() => {
+        const inp = document.getElementById('vnInput');
+        if (ui.chatAgent !== ent || (inp && inp.value.trim()) || (inp && document.activeElement === inp)) return;   // 사람이 그 창을 쓰는 중이면 둔다
+        ui.el.vnBox.classList.add('closing'); setTimeout(() => { if (ui.chatAgent === ent) ui.closeAll(); ui.el.vnBox.classList.remove('closing'); }, 380);
+      }, wait);
+    };
+    if (Sniffer.Voice && Sniffer.Voice.speakFor) Sniffer.Voice.speakFor(ent, body, { onend: dismiss }); else dismiss();
   }
   _lbl(id) { const e = this._ent(id); return e ? e.label : (id || '?'); }
   _runLabel(h, no) { const n = no != null ? no : (h && h.no); return 'P' + (n != null ? n : String((h && (h.id || h.executionId)) || '').slice(0, 4)); }
@@ -134,7 +143,7 @@ Sniffer.Live = class Live {
   async _engineEvent(e, s) {
     const D = this.d, R = this.run, S = Sniffer.util.short, agent = this._aid(e.agent, s);
     switch (e.kind) {
-      case 'request': R.text = e.text || R.text; break;
+      case 'request': R.text = e.text || R.text; if (Sniffer.Voice && Sniffer.Voice.hold) Sniffer.Voice.hold(); break;   // 풀이 시작: 마이크 끔
       case 'planning': if (agent) { await this._pickup(agent); this._work('__plan', agent, '계획 중'); } break;
       case 'plan': {
         delete R.inflight.__plan;
@@ -178,6 +187,7 @@ Sniffer.Live = class Live {
         if (!R.started) await this._pickup(null);   // 아무도 받기 전에 끝남(계획 실패·취소): 카드만 칠판에 올렸다가 결과 도장
         await D.dispatch({ kind: 'submit', ok, by, note: cancelled ? '취소됨' : ok ? `${this._lbl(by)} 제출 · ${(e.tokens || 0).toLocaleString()} tok` : `실패: ${S(e.text, 50)}` });
         const b = this._ent(by); if (b && b.isTeacher) await D.dispatch({ kind: 'idle', agent: by });
+        if (Sniffer.Voice && Sniffer.Voice.release) Sniffer.Voice.release(!(Sniffer.Voice.enabled && !cancelled));   // 끝: 답을 읽을 거면 읽은 뒤에, 아니면 바로 다시 듣는다
         if (Sniffer.Voice && Sniffer.Voice.enabled && !cancelled) { const cur = AIGO.state.executions.current; Sniffer.Voice.speakAnswer((ok && cur && (cur.id || cur.executionId) === R.id && cur.finalResult) || e.text, ok); }   // 음성 모드: 답(가능하면 전체 finalResult)을 읽어 준다
         R.holder = null; R.done = true;
         break;

@@ -260,3 +260,6 @@ body.fit-cover #scene{inset:auto;left:50%;top:0;transform:translateX(-50%);width
 #voiceText:empty{display:none;}
 #voiceHint{display:block;font-size:11px;color:var(--dim);margin-top:3px;}
 @media (prefers-reduced-motion:reduce){#voicePanel.listen .vp-mic i{animation:none;opacity:.5;}#micBtn.listening{animation:none;}}
+
+/* 학생이 말을 마치면 대화창이 스르르 내려간다 (live.js _announce) */
+#vnBox.closing { opacity: 0; transform: translateY(14px); transition: opacity .35s ease, transform .35s ease; pointer-events: none; }

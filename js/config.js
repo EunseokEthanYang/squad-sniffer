@@ -84,7 +84,7 @@ Sniffer.config = {
     /* 에이전트가 답을 끝낼 때마다: 그 캐릭터의 미연시 대화창을 열고, 그 캐릭터 목소리로 읽는다.
        목소리는 서버의 /_tts (aigo-web LOCAL_TTS=1 → Supertonic 3) 가 있으면 그것, 없으면 브라우저 음성.
        presets: 캐릭터 세트 → Supertonic 프리셋(F1~F5 여성, M1~M5 남성) */
-    agents: { enabled: true, vn: true, maxChars: 400, speed: 1.05,
+    agents: { enabled: true, vn: true, maxChars: 1500, speed: 1.05,   // 답은 끝까지 읽는다(문장 단위로 나눠 먼저 나온 문장부터). 너무 길면 이하 생략
               /* 원음이 44.1kHz/48kHz 인 프리셋만(F1·F2·F3·M1·M2). F4·F5·M3~M5 는 24kHz 원음이라 탁하게 들린다 */
               presets: { cho_mi: 'F1', no_mi: 'F2', seonsaeng: 'F3', gal_bi: 'F2', robot: 'M2' } },
     tts: { path: '/_tts/v1/tts' },
