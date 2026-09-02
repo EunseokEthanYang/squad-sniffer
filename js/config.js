@@ -83,7 +83,8 @@ Sniffer.config = {
        목소리는 서버의 /_tts (aigo-web LOCAL_TTS=1 → Supertonic 3) 가 있으면 그것, 없으면 브라우저 음성.
        presets: 캐릭터 세트 → Supertonic 프리셋(F1~F5 여성, M1~M5 남성) */
     agents: { enabled: true, vn: true, maxChars: 400, speed: 1.05,
-              presets: { cho_mi: 'F1', no_mi: 'F2', seonsaeng: 'F4', gal_bi: 'F3', robot: 'M2' } },
+              /* 원음이 44.1kHz/48kHz 인 프리셋만(F1·F2·F3·M1·M2). F4·F5·M3~M5 는 24kHz 원음이라 탁하게 들린다 */
+              presets: { cho_mi: 'F1', no_mi: 'F2', seonsaeng: 'F3', gal_bi: 'F2', robot: 'M2' } },
     tts: { path: '/_tts/v1/tts' },
     minChars: 3,                                 // 이보다 짧은 인식 결과는 버림(잡음)
     busyTimeoutMs: 8 * 60 * 1000,               // 답이 이만큼 안 오면 다시 듣기
