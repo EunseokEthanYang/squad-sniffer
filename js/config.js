@@ -29,6 +29,8 @@ Sniffer.config = {
     'gpt-oss-20b': 1, 'qwen3-32b': 1, 'llama-4-scout': 1, 'llama-3.1-8b': 1, 'gemma': 1,
     'gpt-oss-120b': 2, 'llama-3.3-70b': 2, 'llama-4-maverick': 2, 'qwen3-235b': 2,
     'exaone': 3, 'kimi-k2': 3, 'deepseek-r1': 3,
+    /* 이 컴퓨터의 CLI 에이전트를 모델로 쓸 때(aigo-web LOCAL_AGENTS=1): 반장 claude 는 선배(2×), 일꾼 codex 는 후배(1×) */
+    'claude-code': 2, 'codex-cli': 1,
   },
   roleLabels: { 1: '후배', 2: '선배', 3: '선생님' },
   plannerLabel: '반장',
