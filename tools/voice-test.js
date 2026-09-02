@@ -22,9 +22,11 @@ global.speechSynthesis = {
   speak(u) { spoken.push(u.text); this.cur = u; setTimeout(() => { if (this.cur === u && u.onend) u.onend(); }, 5); },   // 5ms 뒤 다 읽음
   cancel() { this.cur = null; },
 };
+global.fetch = () => Promise.reject(new Error('no server'));
+global.localStorage = { _m: {}, getItem(k) { return this._m[k] ?? null; }, setItem(k, v) { this._m[k] = String(v); } };
 global.Sniffer = { util: { short: (s, n) => String(s).slice(0, n) }, app: { sourceKind: 'live' } };
 eval(fs.readFileSync(path, 'utf8'));
-const V = Sniffer.Voice, cfg = { voice: { enabled: true, auto: true, lang: 'ko-KR', minChars: 3, cues: true, prompt: '문제를 말해 주세요', busyTimeoutMs: 480000 } };
+const V = Sniffer.Voice, cfg = { voice: { enabled: true, auto: true, agents: { enabled: true }, lang: 'ko-KR', minChars: 3, cues: true, prompt: '문제를 말해 주세요', busyTimeoutMs: 480000 } };
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 let submitted = [];
 const fail = [];

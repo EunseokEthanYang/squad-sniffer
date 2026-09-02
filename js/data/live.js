@@ -51,10 +51,21 @@ Sniffer.Live = class Live {
   _aid(x, s) { if (!x) return null; if (this.d.world.get(x)) return x; const a = (s.agents || []).find(y => y.id === x || y.name === x); return a ? a.id : null; }
   _ent(id) { return id ? this.d.world.get(id) : null; }
   /* 에이전트가 답을 끝내면 그 캐릭터의 미연시 대화창을 열어 답을 보여 주고, 그 캐릭터 목소리로 읽는다 (config.voice.agents) */
-  _announce(id, text) {
+  _announce(id, text, key) {
     const V = (this.d.cfg && this.d.cfg.voice) || {}, A = V.agents || {};
     if (!A.enabled) return;
     const ent = this._ent(id), ui = this.d.ui; if (!ent || !ui) return;
+    /* 교실이 여러 곳(분할 화면 iframe · 교실 탭 · 새 창)에 떠 있으면 전부 같은 이벤트를 받는다.
+       같은 답을 한 페이지만 읽도록 localStorage 로 선점한다 — 먼저 잡은 쪽만 말하고, 나머지는 창만 연다 */
+    let speaker = true;
+    if (key) {
+      try {
+        const k = 'sniffer_spoke:' + key, now = Date.now(), prev = Number(localStorage.getItem(k) || 0);
+        if (prev && now - prev < 90000) speaker = false; else localStorage.setItem(k, String(now));
+        if (!speaker && (this._seenSpeak || (this._seenSpeak = new Set())).has(key)) return;   // 같은 페이지의 중복 이벤트
+        (this._seenSpeak || (this._seenSpeak = new Set())).add(key);
+      } catch (e) {}
+    }
     const body = (Sniffer.Voice && Sniffer.Voice.clean) ? Sniffer.Voice.clean(text) : text;
     if (A.vn !== false) {
       (ui.chatLogs[ent.id] = ui.chatLogs[ent.id] || []).push({ who: 'agent', text: body });
@@ -70,7 +81,7 @@ Sniffer.Live = class Live {
         ui.el.vnBox.classList.add('closing'); setTimeout(() => { if (ui.chatAgent === ent) ui.closeAll(); ui.el.vnBox.classList.remove('closing'); }, 380);
       }, wait);
     };
-    if (Sniffer.Voice && Sniffer.Voice.speakFor) Sniffer.Voice.speakFor(ent, body, { onend: dismiss }); else dismiss();
+    if (speaker && Sniffer.Voice && Sniffer.Voice.speakFor) Sniffer.Voice.speakFor(ent, body, { onend: dismiss }); else dismiss();
   }
   _lbl(id) { const e = this._ent(id); return e ? e.label : (id || '?'); }
   _runLabel(h, no) { const n = no != null ? no : (h && h.no); return 'P' + (n != null ? n : String((h && (h.id || h.executionId)) || '').slice(0, 4)); }
@@ -171,7 +182,7 @@ Sniffer.Live = class Live {
       case 'task_done':
         delete R.inflight[e.task];
         if (agent) { await D.dispatch({ kind: 'verify', agent, ok: true, text: '○ ' + (S(e.text, 30) || '완료') }); if (e.text) await D.dispatch({ kind: 'say', agent, text: S(e.text, 70), ms: 2600 }); }
-        if (agent && e.text) this._announce(agent, e.text);
+        if (agent && e.text) this._announce(agent, e.text, `${(this.run && this.run.id) || ''}:${e.seq}`);
         break;
       case 'task_failed':
         delete R.inflight[e.task];

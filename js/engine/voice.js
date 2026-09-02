@@ -19,6 +19,7 @@ Sniffer.Voice = {
 
   init(cfg, onSubmit) {
     const V = this.cfg = cfg.voice || {}; this.onSubmit = onSubmit; this.enabled = !!V.enabled; this.auto = !!V.auto;
+    this.probeTts();                                            // 학생 목소리를 낼 수 있는지 (서버 TTS 유무)
     const $ = id => document.getElementById(id);
     this.btn = $('micBtn'); this.panel = $('voicePanel'); this.main = $('voiceMain'); this.txt = $('voiceText'); this.hint = $('voiceHint');
     if (!this.enabled || !this.panel) return this;
@@ -203,9 +204,22 @@ Sniffer.Voice = {
     speechSynthesis.speak(u);
   },
   /* 에이전트가 답을 끝냈을 때: 그 캐릭터 세트의 프리셋 목소리로, 끝까지 */
+  /* 학생 목소리는 옵션이 있을 때만: 서버 TTS(/_tts, aigo-web LOCAL_TTS=1)가 살아 있거나 ?speak=1. 아니면 창만 연다 */
+  agentSpeechAllowed() {
+    const A = (this.cfg && this.cfg.agents) || {};
+    if (A.enabled === true) return true;
+    if (A.enabled === false) return false;
+    try { if (new URLSearchParams(location.search).get('speak') === '1') return true; } catch (e) {}
+    return this._ttsOk === true;                                 // 'auto': 서버 목소리가 있을 때만
+  },
+  probeTts() {
+    const T = (this.cfg && this.cfg.tts) || {}; if (!T.path || !window.fetch) { this._ttsOk = false; return; }
+    const h = T.path.replace(/\/v1\/tts$/, '') + '/healthz';
+    fetch(h, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => { this._ttsOk = !!(j && j.status === 'ok'); }, () => { this._ttsOk = false; });
+  },
   speakFor(ent, text, opts) {
     const A = (this.cfg && this.cfg.agents) || {};
-    if (A.enabled === false || !ent) { if (opts && opts.onend) opts.onend(); return; }
+    if (!ent || !this.agentSpeechAllowed()) { if (opts && opts.onend) opts.onend(); return; }
     const voice = (A.presets || {})[ent.charSet] || A.voice;
     let body = this.clean(text); const max = A.maxChars || 1500;
     if (body.length > max) body = body.slice(0, max).replace(/\s+\S*$/, '') + ' … 이하 생략.';
