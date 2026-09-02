@@ -253,7 +253,11 @@ Sniffer.Live = class Live {
     ].filter(Boolean).join('\n\n');
     /* gpt-oss 계열은 사고에 상한을 다 써 버리면 본문이 빈 채로 온다 — 사고를 낮추고, 그래도 비면 한 번 더 넉넉히 */
     const c = new AigoClient({ base: this.cfg.proxyBase }), msgs = [{ role: 'system', content: sys }, { role: 'user', content: q }];
-    const ask = max => c.post('/v1/chat/completions', { model: sa.modelId, stream: false, max_tokens: max, temperature: 0.6, reasoning_effort: 'low', messages: msgs })
+    /* 잡담은 빠른 짝 모델로 — 로컬 CLI 다리는 claude-code 옆에 claude-chat(도구 없음·저추론, 4~15초)을 함께 낸다.
+       라우터가 그 이름을 실제로 서빙할 때만 바꾼다 (config.chatModels) */
+    const served = (s.server && s.server.models) || [], CM = this.cfg.chatModels || {};
+    const model = (CM[sa.modelId] && served.includes(CM[sa.modelId])) ? CM[sa.modelId] : sa.modelId;
+    const ask = max => c.post('/v1/chat/completions', { model, stream: false, max_tokens: max, temperature: 0.6, reasoning_effort: 'low', messages: msgs })
       .then(r => String((((r.choices || [])[0] || {}).message || {}).content || '').replace(/\s+/g, ' ').trim(), () => '');
     return ask(400).then(t => t || ask(900)).then(t => t || this._canned(a, q, s, sa));
   }

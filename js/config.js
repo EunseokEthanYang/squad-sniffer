@@ -32,6 +32,8 @@ Sniffer.config = {
     /* 이 컴퓨터의 CLI 에이전트를 모델로 쓸 때(aigo-web LOCAL_AGENTS=1): 반장 claude 는 선배(2×), 일꾼 codex 는 후배(1×) */
     'claude-code': 2, 'codex-cli': 1,
   },
+  /* 말을 걸 때(Space) 쓸 빠른 짝 모델: 작업용 모델 → 잡담용 모델. 라우터가 서빙할 때만 적용 */
+  chatModels: { 'claude-code': 'claude-chat', 'codex-cli': 'codex-chat' },
   roleLabels: { 1: '후배', 2: '선배', 3: '선생님' },
   plannerLabel: '반장',
   tierColors: { 1: '#3ecf6e', 2: '#4da3ff', 3: '#c77dff' },
