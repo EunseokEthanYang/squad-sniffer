@@ -48,7 +48,7 @@ Sniffer.Voice = {
 
   /* ---- 마이크·소리 즉시 정지 (화면 문구는 건드리지 않음) ---- */
   _abort() { clearTimeout(this._restartTimer); clearTimeout(this._permTimer); const r = this._rec; this._rec = null; if (r) { r.onstart = r.onresult = r.onerror = r.onend = null; try { r.abort(); } catch (e) {} } },
-  _hush() { this._sgen++; if ('speechSynthesis' in window) speechSynthesis.cancel(); },   // 진행 중 발화 취소 + 그 콜백 무효화
+  _hush() { this._sgen++; if ('speechSynthesis' in window) speechSynthesis.cancel(); const au = this._audio; this._audio = null; if (au) { try { au.onended = au.onerror = null; au.pause(); au.src = ''; } catch (e) {} } },   // 진행 중 발화(브라우저 음성·서버 오디오) 취소 + 그 콜백 무효화
   silence() { this._abort(); this._hush(); },
 
   /* ---- 듣기 ---- */
@@ -123,10 +123,54 @@ Sniffer.Voice = {
     if (/server restarted/i.test(r)) return '서버가 재시작됐어요.';
     return '콘솔에서 이유를 확인해 주세요.';
   },
+  /* 음성 루프(마이크)와 무관하게 아무 때나 읽기. 서버 TTS(/_tts, Supertonic) 가 있으면 그 목소리로,
+     없거나 실패하면 브라우저 음성으로. opts: { voice: 'F2', speed, onend } */
+  say(text, opts) {
+    opts = opts || {}; text = (text || '').trim();
+    if (!text) { if (opts.onend) opts.onend(); return; }
+    this._hush();
+    const g = this._sgen, cfg = this.cfg || {}, T = cfg.tts || {};
+    const fin = () => { if (this._sgen !== g) return; if (opts.onend) opts.onend(); };
+    if (T.path && this._ttsDown !== true && window.fetch) {
+      const body = { text: text.slice(0, (cfg.agents && cfg.agents.maxChars) || 400), voice: opts.voice || T.voice, speed: opts.speed || (cfg.agents && cfg.agents.speed) || cfg.rate };
+      fetch(T.path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then(r => { if (!r.ok) throw new Error('tts ' + r.status); return r.blob(); })
+        .then(blob => {
+          if (this._sgen !== g) return;
+          const au = new Audio(URL.createObjectURL(blob)); this._audio = au;
+          au.onended = () => { if (this._audio === au) this._audio = null; URL.revokeObjectURL(au.src); fin(); };
+          au.onerror = () => { if (this._audio === au) this._audio = null; this._sayBrowser(text, g, fin); };
+          au.play().catch(() => { if (this._audio === au) this._audio = null; this._sayBrowser(text, g, fin); });   // 자동재생 차단 → 브라우저 음성
+        })
+        .catch(err => {                                        // 서비스가 없다: 한동안 묻지 않고 브라우저 음성으로
+          this._ttsDown = true; setTimeout(() => { this._ttsDown = false; }, 60000);
+          if (this._sgen === g) this._sayBrowser(text, g, fin);
+        });
+      return;
+    }
+    this._sayBrowser(text, g, fin);
+  },
+  _sayBrowser(text, g, fin) {
+    if (!('speechSynthesis' in window) || this._sgen !== g) { fin(); return; }
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = (this.cfg && this.cfg.lang) || 'ko-KR'; u.rate = (this.cfg && this.cfg.rate) || 1; if (this._voice) u.voice = this._voice;
+    let done = false; const end = () => { if (done) return; done = true; fin(); };
+    u.onend = end; u.onerror = end; setTimeout(end, Math.min(120000, 400 + text.length * 180));
+    speechSynthesis.speak(u);
+  },
+  /* 에이전트가 답을 끝냈을 때: 그 캐릭터 세트의 프리셋 목소리로 */
+  speakFor(ent, text) {
+    const A = (this.cfg && this.cfg.agents) || {};
+    if (A.enabled === false || !ent) return;
+    const voice = (A.presets || {})[ent.charSet] || A.voice;
+    this.say(this.clean(text), { voice, speed: A.speed });
+  },
   speak(text, opts) {
     opts = opts || {};
-    if (!this.enabled || !('speechSynthesis' in window) || !text) { if (opts.onend) opts.onend(); return; }
+    if (!this.enabled || !text) { if (opts.onend) opts.onend(); return; }
     this._abort();                                             // 스피커 소리를 마이크가 되먹지 않게
+    if ((this.cfg.tts || {}).path) return this.say(text, opts);   // 서버 목소리가 있으면 답 읽기도 그것으로
+    if (!('speechSynthesis' in window)) { if (opts.onend) opts.onend(); return; }
     this._hush();                                              // 앞 발화 취소 + 그 콜백 무효화
     const g = this._sgen, u = new SpeechSynthesisUtterance(text);
     u.lang = this.cfg.lang || 'ko-KR'; u.rate = this.cfg.rate || 1; if (this._voice) u.voice = this._voice;

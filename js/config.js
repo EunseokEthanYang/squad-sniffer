@@ -79,6 +79,12 @@ Sniffer.config = {
     auto: true,                                  // 켜지면 접속 즉시 듣기 시작, 답을 읽어 준 뒤 다시 듣기 (버튼 불필요)
     rate: 1.05, maxSpeakChars: 400,             // 답 읽기: 속도, 최대 글자(그 뒤는 "… 이하 생략")
     cues: true,                                  // 접수/완료/실패 짧은 안내 멘트
+    /* 에이전트가 답을 끝낼 때마다: 그 캐릭터의 미연시 대화창을 열고, 그 캐릭터 목소리로 읽는다.
+       목소리는 서버의 /_tts (aigo-web LOCAL_TTS=1 → Supertonic 3) 가 있으면 그것, 없으면 브라우저 음성.
+       presets: 캐릭터 세트 → Supertonic 프리셋(F1~F5 여성, M1~M5 남성) */
+    agents: { enabled: true, vn: true, maxChars: 400, speed: 1.05,
+              presets: { cho_mi: 'F1', no_mi: 'F2', seonsaeng: 'F4', gal_bi: 'F3', robot: 'M2' } },
+    tts: { path: '/_tts/v1/tts' },
     minChars: 3,                                 // 이보다 짧은 인식 결과는 버림(잡음)
     busyTimeoutMs: 8 * 60 * 1000,               // 답이 이만큼 안 오면 다시 듣기
     prompt: '문제를 말해 주세요',
