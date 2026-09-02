@@ -8,12 +8,12 @@ AI:GO 백엔드 데이터 전수 수집기 (읽기 전용).
 사용:  python dump_all.py
 설정은 아래 BASE / KEY 변경.
 """
-import json, os, sys, time, urllib.request, urllib.error, urllib.parse
+import os, json, os, sys, time, urllib.request, urllib.error, urllib.parse
 try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass
 
-BASE = "https://aigo-web-production.up.railway.app"
-KEY  = "aigo-834a73a39c9a0af596c967a1"
+BASE = os.environ.get("AIGO_BASE", "http://127.0.0.1:8001")   # 기본: 이 컴퓨터의 Backend.AI GO 앱
+KEY  = os.environ.get("AIGO_KEY", "")                          # 액세스 키 (없으면 빈 값)
 
 # ---- 전역 읽기 전용 엔드포인트 (스쿼드 시각화에 유효한 것 위주로 선별) ----
 GLOBAL_GETS = [

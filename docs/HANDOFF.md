@@ -15,7 +15,7 @@ Junction 해커톤(Lablup×FuriosaAI 트랙)용 **에이전트 스쿼드 시각�
 
 - **챌린지**: 작은 오픈소스 모델 여럿으로 에이전트 스쿼드를 짜서 SW 벤치마크를 풀고, 스쿼드 동작(누가 무엇을 누구에게 넘겼고, 어디서 왜 막혔는지)을 **CS 비전공 심사위원이 설명 없이 이해**할 수 있게 시각화. 시각화도 핵심 심사 요소.
 - **팀 스쿼드 설계(제출 초안 "Taximeter Squad")**: 비용 캐스케이드 — 후배 Qwen3-32B(1×) → 선배 gpt-oss-120b(2×) → 선생님 K-EXAONE-236B(3×). 싼 검산(구거법 mod9 등) 먼저, Budget Manager가 "기대이득 < 임계면 손절". 초안 파일: `C:\Users\c0106\Downloads\submission_description_draft.md`. **단, 이 설계는 바뀔 수 있음** — 코드는 특정 구조에 묶지 말 것(§6).
-- **호스팅 앱**: Backend.AI GO(AI:GO) 웹판 `https://aigo-web-production.up.railway.app/?k=aigo-834a73a39c9a0af596c967a1` (쿼리 `k` = 접근 키). **서버는 값 읽기 전용**으로만 쓴다(배포/쓰기 금지, 스쿼드 생성·실행 금지 — 팀장 허가 전).
+- **호스팅 앱**: Backend.AI GO(AI:GO) 웹판 `https://aigo-web-production.up.railway.app/?k=<접근 토큰>` (쿼리 `k` = 접근 키). **서버는 값 읽기 전용**으로만 쓴다(배포/쓰기 금지, 스쿼드 생성·실행 금지 — 팀장 허가 전).
 
 ## 2. 팀장(사용자)의 원칙·선호 — 반드시 지킬 것
 
@@ -57,7 +57,7 @@ squad-sniffer/
 
 ## 4. 데이터 레이어 — 확정 사실
 
-- **인증**: 모든 REST/에셋에 `?k=aigo-834a…`. 브라우저 다른 origin은 **CORS 차단** → 프록시 필수.
+- **인증**: 모든 REST/에셋에 `?k=<접근 토큰>`. 브라우저 다른 origin은 **CORS 차단** → 프록시 필수.
 - **실시간**: `GET /api/v1/events` SSE(named event). 유휴 시 `: ping`/15초. **실행 이벤트 이름·페이로드는 아직 미관측**(스쿼드가 실제 실행된 적 없음). `backend/sse_tap.py`로 캡처 예정 → `config.eventMap`(→AIGO.EVENT_MAP) 채우면 정규화 완성.
 - **핵심 엔드포인트**(squadService 번들에서 추출, 363개 중): `squads`, `squads/{id}`(agents[]: id/name/role.type/systemPrompt/toolConfig/modelPreferences.preferredModelId), `readiness`, `budget`{maxTotalTokens 100000, maxTokensPerAgent 30000, maxTokensPerTask, maxConcurrentAgents 3, maxAgentTurns, warningThresholdPercent 80…}, `budget/usage`{totalTokens, perAgentTokens{}, tasksCreated, activeAgents, exceeded, warningEmitted, emergencyStopped}, `tasks`, `tasks/graph`{tasks,waves,readyTaskIds}, `history`, `history/{eid}`, `history/{eid}/logs`, `activity-log/load`, `analytics`, `monitoring/metrics`(tokensPerSecond), `router/status`(서빙 모델 3종: Qwen3-32B-FP8 / gpt-oss-120b / K-EXAONE-236B-A23B-NVFP4A16). 쓰기: `POST squads/{id}/execute`, `POST agents/{aid}/message`(팀 승인 후).
 - **서버 현황**: 팀이 만든 스쿼드 1개(이름이 "Code Review Squad"→"트래픽 분석 스쿼드"로 바뀜; Planner/트래픽 분석가/품질 검토자/리포터, 전부 Qwen). **우리 캐스케이드 스쿼드는 서버에 아직 없음.** 실행 0회.

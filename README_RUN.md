@@ -12,8 +12,8 @@
 | 수동 | `python backend/proxy.py 8790` 후 브라우저에서 위 주소 |
 
 - 포트가 겹치면 `run.bat 8791` 처럼 다른 포트. (기본 8790 — 8765 는 다른 앱과 충돌 이력이 있어 쓰지 않음)
-- 인터넷 필요: 폰트(CDN) + LIVE 데이터(AI:GO Railway). 오프라인이면 폰트만 기본값으로 바뀌고 MOCK 으로 돎.
-- `backend/proxy.py` 는 정적 서빙 + `/aigo/*` 리버스 프록시(접근 키 자동 부착, CORS 우회). 서버에 **읽기만** 한다.
+- LIVE 데이터: 기본은 이 컴퓨터의 Backend.AI GO 앱(관리 API `127.0.0.1:8001`, 앱 설정 → API → 관리 API 켜기). 다른 서버는 `AIGO_BASE=… AIGO_KEY=… ./run.sh`. 폰트는 CDN 이라 오프라인이면 기본 글꼴로.
+- `backend/proxy.py` 는 정적 서빙 + `/aigo/*` 리버스 프록시(액세스 키를 헤더로 부착, CORS 우회). 문제 내기·말 걸기(POST)도 통과한다.
 
 ## 조작
 | 키 | 동작 |

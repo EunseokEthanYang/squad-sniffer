@@ -6,7 +6,9 @@ squad-sniffer 로컬 백엔드 (의존성 0, 표준 라이브러리만)
      - 일반 JSON 응답은 그대로 중계
      - /aigo/api/v1/events 같은 SSE(text/event-stream)는 청크 단위로 실시간 통과
   3) POST /snap : 캔버스 스냅샷 수신(개발 검증용)
-실행:  python backend/proxy.py [port]     (기본 8790)  — 또는 run.bat
+실행:  python backend/proxy.py [port]     (기본 8790)  — 또는 ./run.sh
+     기본은 이 컴퓨터의 Backend.AI GO 앱(관리 API 127.0.0.1:8001)에 붙는 사이드 앱 모드.
+     다른 서버: AIGO_BASE=https://… AIGO_KEY=… (aigo-web 배포본이면 게이트 토큰, 데스크톱 앱이면 액세스 키)
 브라우저:  http://127.0.0.1:8790/index.html
 """
 import sys, os, json, base64, urllib.request, urllib.error, urllib.parse
@@ -16,11 +18,41 @@ try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass
 
 ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # squad-sniffer/
-BASE  = os.environ.get("AIGO_BASE", "https://aigo-web-production.up.railway.app")
-KEY   = os.environ.get("AIGO_KEY",  "aigo-834a73a39c9a0af596c967a1")
 PORT  = int(sys.argv[1]) if len(sys.argv) > 1 else 8790   # 8765 는 다른 앱(Fusion360)과 충돌 이력 → 8790
 PREFIX = "/aigo/"
 SNAP_OUT = os.path.join(ROOT, "backend", "dump", "snapshot.png")
+
+# ---- 어느 AI:GO 에 붙을까 ----------------------------------------------------------------
+#   AIGO_BASE       Management API 주소. 비우면 이 컴퓨터의 Backend.AI GO 앱(127.0.0.1:8001)을 찾는다
+#   AIGO_INFERENCE  OpenAI 호환 추론 주소(/v1). 비우면 데스크톱 앱은 127.0.0.1:39080, 그 밖에는 AIGO_BASE
+#   AIGO_KEY        액세스 키. 데스크톱 앱은 API > 액세스 키 에서 만든 값(X-API-Key), aigo-web 배포본은 게이트 토큰
+#   AIGO_AUTH       apikey | gate | auto(기본: 127.0.0.1 이면 apikey, 아니면 gate)
+LOCAL_APP = "http://127.0.0.1:8001"
+LOCAL_INFERENCE = "http://127.0.0.1:39080"
+
+def _alive(url):
+    try:
+        with urllib.request.urlopen(url, timeout=1.5) as r: return r.status < 500
+    except urllib.error.HTTPError as e: return e.code in (401, 403)   # 살아는 있는데 키가 필요한 상태
+    except Exception: return False
+
+BASE = os.environ.get("AIGO_BASE", "").rstrip("/")
+if not BASE:
+    if _alive(LOCAL_APP + "/api/v1/health"): BASE = LOCAL_APP
+    else:
+        sys.stderr.write(
+            "AI:GO 서버를 찾지 못했습니다.\n"
+            "  · 이 컴퓨터의 Backend.AI GO 앱을 쓰려면: 앱 설정 → API → 관리 API 를 켜세요 (127.0.0.1:8001)\n"
+            "  · 다른 서버를 쓰려면: AIGO_BASE=http://주소[:포트] AIGO_KEY=<키> ./run.sh\n")
+        sys.exit(2)
+KEY = os.environ.get("AIGO_KEY", "")
+AUTH = os.environ.get("AIGO_AUTH", "auto")
+if AUTH == "auto": AUTH = "apikey" if BASE.startswith("http://127.0.0.1") or BASE.startswith("http://localhost") else "gate"
+INFERENCE = os.environ.get("AIGO_INFERENCE", "").rstrip("/") or (LOCAL_INFERENCE if BASE == LOCAL_APP else BASE)
+
+def auth_headers():
+    if not KEY: return {}
+    return {"X-API-Key": KEY} if AUTH == "apikey" else {"X-Access-Token": KEY}
 
 class H(SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
@@ -46,16 +78,16 @@ class H(SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 
-    def proxy(self):
-        path = self.path[len(PREFIX)-1:]                    # "/api/v1/..."
-        sep = "&" if "?" in path else "?"
-        url = f"{BASE}{path}{sep}k={urllib.parse.quote(KEY)}"
-        req = urllib.request.Request(url, headers={
-            "Accept": self.headers.get("Accept", "*/*"),
-            "Cache-Control": "no-cache",
-        })
+    def proxy(self, body=None):
+        path = self.path[len(PREFIX)-1:]                    # "/api/v1/..." 또는 "/v1/..."
+        target = INFERENCE if (path == "/v1" or path.startswith("/v1/")) else BASE
+        url = f"{target}{path}"
+        headers = {"Accept": self.headers.get("Accept", "*/*"), "Cache-Control": "no-cache"}
+        headers.update(auth_headers())
+        if body is not None: headers["Content-Type"] = self.headers.get("Content-Type", "application/json")
+        req = urllib.request.Request(url, data=body, method=self.command, headers=headers)
         try:
-            up = urllib.request.urlopen(req, timeout=None if "events" in path else 30)
+            up = urllib.request.urlopen(req, timeout=None if "events" in path else 300)
         except urllib.error.HTTPError as e:
             body = e.read()
             self.send_response(e.code); self._cors()
@@ -95,8 +127,19 @@ class H(SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(len(body))); self.end_headers()
             self.wfile.write(body)
 
-    # ---- 스냅샷 수신(개발용) ----
+    def _body(self):
+        n = int(self.headers.get("Content-Length", 0) or 0)
+        return self.rfile.read(n) if n else b""
+    def do_PUT(self):
+        if self.path.startswith(PREFIX): return self.proxy(self._body())
+        self.send_response(404); self.end_headers()
+    def do_DELETE(self):
+        if self.path.startswith(PREFIX): return self.proxy(b"")
+        self.send_response(404); self.end_headers()
+
+    # ---- POST: 프록시(문제 내기 · 말 걸기) + 스냅샷 수신(개발용) ----
     def do_POST(self):
+        if self.path.startswith(PREFIX): return self.proxy(self._body())
         if self.path.startswith("/snap"):
             n = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(n).decode()
@@ -110,5 +153,7 @@ class H(SimpleHTTPRequestHandler):
 if __name__ == "__main__":
     print(f"squad-sniffer backend  http://127.0.0.1:{PORT}/index.html")
     print(f"  static root : {ROOT}")
-    print(f"  proxy       : http://127.0.0.1:{PORT}{PREFIX}api/v1/...  ->  {BASE}/api/v1/... (+k)")
+    print(f"  proxy       : http://127.0.0.1:{PORT}{PREFIX}api/v1/...  ->  {BASE}/api/v1/...  ({'X-API-Key' if AUTH == 'apikey' else 'X-Access-Token'}{'' if KEY else ' 없음'})")
+    print(f"  inference   : http://127.0.0.1:{PORT}{PREFIX}v1/...      ->  {INFERENCE}/v1/...")
+    if BASE == LOCAL_APP: print("  source      : 이 컴퓨터의 Backend.AI GO 앱 (사이드 앱 모드)")
     ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()

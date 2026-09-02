@@ -1,7 +1,7 @@
 # AI:GO 서버에서 가져올 수 있는 값 — 데이터 카탈로그 & 활용 맵
 
 - 서버: `https://aigo-web-production.up.railway.app`
-- 인증: 모든 요청(API·에셋·SSE)에 쿼리 `?k=aigo-834a73a39c9a0af596c967a1`
+- 인증: 모든 요청(API·에셋·SSE)에 쿼리 `?k=<접근 토큰>`
 - 원칙: **읽기 전용(GET + SSE 구독)**. 서버는 "값을 받아오는 용도"로만 쓴다.
 - 도구: `backend/proxy.py`(**로컬 백엔드: 정적 서빙 + `/aigo/*` 프록시, 포트 8790**) · `backend/aigo_client.js`(브라우저 클라이언트, 기본 base `/aigo`) · `backend/dump_all.py`(전수 덤프) · `backend/sse_tap.py`(실시간 이벤트 탭)
 - 출처: 앱 JS 번들 역분석 (`squadService-*.js`, `useServerEvent-*.js`) — 총 363개 API 경로 중 시각화 관련만 선별

@@ -4,12 +4,12 @@ AI:GO SSE 탭 — /api/v1/events 의 raw 스트림을 읽어 모든 이벤트(�
 브라우저 EventSource는 이름을 미리 알아야 듣지만, 여기선 raw 파싱이라 '어떤 이벤트가 존재하는지' 발견용.
 사용: python sse_tap.py [초]   (기본 20초)
 """
-import sys, time, json, os, urllib.request
+import os, sys, time, json, os, urllib.request
 try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass
 
-BASE = "https://aigo-web-production.up.railway.app"
-KEY  = "aigo-834a73a39c9a0af596c967a1"
+BASE = os.environ.get("AIGO_BASE", "http://127.0.0.1:8001")   # 기본: 이 컴퓨터의 Backend.AI GO 앱
+KEY  = os.environ.get("AIGO_KEY", "")                          # 액세스 키 (없으면 빈 값)
 DUR  = float(sys.argv[1]) if len(sys.argv) > 1 else 20
 
 url = f"{BASE}/api/v1/events?k={KEY}"
