@@ -7,7 +7,7 @@ squad-sniffer 로컬 백엔드 (의존성 0, 표준 라이브러리만)
      - /aigo/api/v1/events 같은 SSE(text/event-stream)는 청크 단위로 실시간 통과
   3) POST /snap : 캔버스 스냅샷 수신(개발 검증용)
 실행:  python backend/proxy.py [port]     (기본 8790)  — 또는 ./run.sh
-     기본은 이 컴퓨터의 Backend.AI GO 앱(관리 API 127.0.0.1:8001)에 붙는 사이드 앱 모드.
+     127.0.0.1:8001 에 관리 API 가 있으면 자동으로 붙는다(헤드리스 aigo-server). 데스크톱 앱 1.12.1 은 그 포트를 열지 않아 미지원.
      다른 서버: AIGO_BASE=https://… AIGO_KEY=… (aigo-web 배포본이면 게이트 토큰, 데스크톱 앱이면 액세스 키)
 브라우저:  http://127.0.0.1:8790/index.html
 """
@@ -42,8 +42,9 @@ if not BASE:
     else:
         sys.stderr.write(
             "AI:GO 서버를 찾지 못했습니다.\n"
-            "  · 이 컴퓨터의 Backend.AI GO 앱을 쓰려면: 앱 설정 → API → 관리 API 를 켜세요 (127.0.0.1:8001)\n"
-            "  · 다른 서버를 쓰려면: AIGO_BASE=http://주소[:포트] AIGO_KEY=<키> ./run.sh\n")
+            "  · 데스크톱 앱(1.12.1)은 관리 API를 밖으로 열지 않아 아직 지원하지 않습니다.\n"
+            "  · aigo-web 컨테이너:  AIGO_BASE=http://127.0.0.1:1001 ./run.sh\n"
+            "  · 배포본·헤드리스:    AIGO_BASE=http://주소[:포트] AIGO_KEY=<키> ./run.sh\n")
         sys.exit(2)
 KEY = os.environ.get("AIGO_KEY", "")
 AUTH = os.environ.get("AIGO_AUTH", "auto")
