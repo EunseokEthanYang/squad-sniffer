@@ -1,5 +1,5 @@
 /* voice.js 상태 기계 시험: 가짜 마이크(SpeechRecognition)·가짜 스피커(speechSynthesis) */
-const fs = require('fs'), path = '/Users/eunseokyang/Documents/Junction Asia Hackathon/squad-sniffer/js/engine/voice.js';
+const fs = require('fs'), path = require('path').join(__dirname, '..', 'js', 'engine', 'voice.js');
 const els = {}; const mk = () => ({ textContent: '', className: '', hidden: true, disabled: false, classList: { toggle(){}, add(){}, remove(){} }, addEventListener(t, f) { this._h = f; }, click() { this._h && this._h(); } });
 for (const id of ['micBtn','voicePanel','voiceMain','voiceText','voiceHint']) els[id] = mk();
 const listeners = {};

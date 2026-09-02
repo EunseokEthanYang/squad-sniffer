@@ -40,12 +40,12 @@ BASE = os.environ.get("AIGO_BASE", "").rstrip("/")
 if not BASE:
     if _alive(LOCAL_APP + "/api/v1/health"): BASE = LOCAL_APP
     else:
+        # No server: still serve the page, which falls back to the built-in scenario by itself.
         sys.stderr.write(
-            "AI:GO 서버를 찾지 못했습니다.\n"
+            "AI:GO 서버를 찾지 못했습니다 — 내장 시나리오(MOCK)만 서빙합니다.\n"
             "  · 데스크톱 앱(1.12.1)은 관리 API를 밖으로 열지 않아 아직 지원하지 않습니다.\n"
             "  · aigo-web 컨테이너:  AIGO_BASE=http://127.0.0.1:1001 ./run.sh\n"
             "  · 배포본·헤드리스:    AIGO_BASE=http://주소[:포트] AIGO_KEY=<키> ./run.sh\n")
-        sys.exit(2)
 KEY = os.environ.get("AIGO_KEY", "")
 AUTH = os.environ.get("AIGO_AUTH", "auto")
 if AUTH == "auto": AUTH = "apikey" if BASE.startswith("http://127.0.0.1") or BASE.startswith("http://localhost") else "gate"
@@ -81,6 +81,12 @@ class H(SimpleHTTPRequestHandler):
 
     def proxy(self, body=None):
         path = self.path[len(PREFIX)-1:]                    # "/api/v1/..." 또는 "/v1/..."
+        if not BASE:                                        # 서버 없이 뜬 경우: 페이지는 MOCK 으로 돌고, 프록시는 503
+            body = json.dumps({"error": "no AI:GO server configured (AIGO_BASE); serving the built-in scenario only"}).encode()
+            self.send_response(503); self._cors()
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body))); self.end_headers()
+            self.wfile.write(body); return
         target = INFERENCE if (path == "/v1" or path.startswith("/v1/")) else BASE
         url = f"{target}{path}"
         headers = {"Accept": self.headers.get("Accept", "*/*"), "Cache-Control": "no-cache"}
@@ -157,4 +163,5 @@ if __name__ == "__main__":
     print(f"  proxy       : http://127.0.0.1:{PORT}{PREFIX}api/v1/...  ->  {BASE}/api/v1/...  ({'X-API-Key' if AUTH == 'apikey' else 'X-Access-Token'}{'' if KEY else ' 없음'})")
     print(f"  inference   : http://127.0.0.1:{PORT}{PREFIX}v1/...      ->  {INFERENCE}/v1/...")
     if BASE == LOCAL_APP: print("  source      : 이 컴퓨터의 Backend.AI GO 앱 (사이드 앱 모드)")
+    if not BASE: print("  source      : 서버 없음 — 내장 시나리오(MOCK)")
     ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
